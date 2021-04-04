@@ -1,0 +1,78 @@
+#!/bin/sh
+location=0
+headerlenght=1
+getsource(){
+	cat $source
+}
+location(){
+	add=$1
+	location=$(expr $location + $add )
+}
+getpart(){
+	tailcut=$1
+	headcut=$2
+	getsource | head -c $headcut | tail -c $(expr $headcut - $tailcut )
+}
+getsizepointer(){
+	sizepointer=$(getpart 0 $headerlenght)
+	location 1
+	
+}
+getsize(){
+	size=$( getpart $location $(expr $location + $sizepointer))
+	location $sizepointer
+}
+gettitle(){
+	title=$(getpart $location $(expr $location + $size))
+	location $size
+}
+getcontent(){
+	getpart $location $(expr $location + $size) > $output/$title
+	location $size
+}
+unpack(){
+	source=$1
+	if [ -z $2 ]; then
+		output=$PWD
+	else
+		mkdir $2
+		output=$2
+	fi
+	getsizepointer
+	while [ $location -lt $(getsource | wc -c ) ]
+	do
+		getsize
+		gettitle
+		getsize
+		getcontent
+	done
+}
+###
+pack(){
+	folder="$1"
+	foder=$(realpath $folder)
+	foldername=$(basename $folder)
+	name=$foldername.ldar
+	cd $folder
+	echo -n 9 >> ../$name
+	for item in $(ls)
+	do
+		if [ -f $item ]; then
+			itemnamelenght=$(echo -n $item | wc -c)
+			until [ $(echo -n $itemnamelenght | wc -c ) = 9 ]
+			do
+				itemnamelenght=0$itemnamelenght
+			done
+			echo -n $itemnamelenght >> ../$name
+			echo -n $item >> ../$name
+			contentlenght=$(cat $item | wc -c)
+			until [ $(echo -n $contentlenght | wc -c ) = 9 ]
+			do
+				contentlenght=0$contentlenght
+			done
+			echo -n $contentlenght >> ../$name
+			cat $item >> ../$name
+		fi
+	done
+}
+$@
