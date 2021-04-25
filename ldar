@@ -1,6 +1,6 @@
 #!/bin/sh
 location=0
-headerlenght=1
+headerlenght=2
 getsource(){
 	cat $source
 }
@@ -22,7 +22,7 @@ unpack(){
 		output=$2
 	fi
 	sizepointer=$(getpart 0 $headerlenght)
-	location 1
+	location $headerlenght
 	while [ $location -lt $(getsource | wc -c ) ]
 	do
 		size=$( getpart $location $(expr $location + $sizepointer))
@@ -32,29 +32,73 @@ unpack(){
 		size=$( getpart $location $(expr $location + $sizepointer))
 		location $sizepointer
 		getpart $location $(expr $location + $size) > $output/$title
+		echo unpacking file $title
 		location $size
 	done
+	cd $output
+	for item in $(ls)
+	do
+		if [ "${item##*.}" = ldar ]; then
+			location=0
+			unpack "$item" "${item%.*}"
+			echo unpacking folder "${item%.*}" as defined by "$item"
+			cd ..
+		fi
+	done
+	rm *.ldar
+}
+max(){
+	echo finding largest file...
+	max=0
+	for file in $(find -type f)
+	do
+		tmp=$(cat $file | wc -c)
+		if [ ! $max -gt $tmp ]; then
+			max=$tmp
+		fi
+	done
+	maxlenght=$(echo $max | wc -c)
 }
 ###
 pack(){
+	echo packing $1
 	folder="$1"
+	#sizepointer=16
 	foder=$(realpath $folder)
 	foldername=$(basename $folder)
 	name=$foldername.ldar
 	cd $folder
-	echo -n 9 >> ../$name
 	for item in $(ls)
 	do
+		if [ -d $item ]; then
+			pack $item
+			cd ..
+		fi
+	done
+	folder="$1"
+	foder=$(realpath $folder)
+	foldername=$(basename $folder)
+	name=$foldername.ldar
+	max
+	if [ ! $(expr $(echo $maxlenght | wc -c) - 1) = 2 ]; then
+		sizepointer=0$maxlenght
+	else
+		sizepointer=$maxlenght
+	fi
+	echo -n $sizepointer >> ../$name
+	for item in $(ls)
+	do
+		echo adding $item
 		if [ -f $item ]; then
 			itemnamelenght=$(echo -n $item | wc -c)
-			until [ $(echo -n $itemnamelenght | wc -c ) = 9 ]
+			until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
 			do
 				itemnamelenght=0$itemnamelenght
 			done
 			echo -n $itemnamelenght >> ../$name
 			echo -n $item >> ../$name
 			contentlenght=$(cat $item | wc -c)
-			until [ $(echo -n $contentlenght | wc -c ) = 9 ]
+			until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
 			do
 				contentlenght=0$contentlenght
 			done
