@@ -13,23 +13,6 @@ getpart(){
 	headcut=$2
 	getsource | head -c $headcut | tail -c $(expr $headcut - $tailcut )
 }
-getsizepointer(){
-	sizepointer=$(getpart 0 $headerlenght)
-	location 1
-	
-}
-getsize(){
-	size=$( getpart $location $(expr $location + $sizepointer))
-	location $sizepointer
-}
-gettitle(){
-	title=$(getpart $location $(expr $location + $size))
-	location $size
-}
-getcontent(){
-	getpart $location $(expr $location + $size) > $output/$title
-	location $size
-}
 unpack(){
 	source=$1
 	if [ -z $2 ]; then
@@ -38,13 +21,18 @@ unpack(){
 		mkdir $2
 		output=$2
 	fi
-	getsizepointer
+	sizepointer=$(getpart 0 $headerlenght)
+	location 1
 	while [ $location -lt $(getsource | wc -c ) ]
 	do
-		getsize
-		gettitle
-		getsize
-		getcontent
+		size=$( getpart $location $(expr $location + $sizepointer))
+		location $sizepointer
+		title=$(getpart $location $(expr $location + $size))
+		location $size
+		size=$( getpart $location $(expr $location + $sizepointer))
+		location $sizepointer
+		getpart $location $(expr $location + $size) > $output/$title
+		location $size
 	done
 }
 ###
