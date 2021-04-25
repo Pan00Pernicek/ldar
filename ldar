@@ -60,23 +60,20 @@ max(){
 	maxlenght=$(echo $max | wc -c)
 }
 ###
-pack(){
+rpack(){
 	echo packing $1
 	folder="$1"
-	#sizepointer=16
-	foder=$(realpath $folder)
 	foldername=$(basename $folder)
 	name=$foldername.ldar
 	cd $folder
 	for item in $(ls)
 	do
 		if [ -d $item ]; then
-			pack $item
+			rpack $item
 			cd ..
 		fi
 	done
 	folder="$1"
-	foder=$(realpath $folder)
 	foldername=$(basename $folder)
 	name=$foldername.ldar
 	max
@@ -107,4 +104,18 @@ pack(){
 		fi
 	done
 }
-$@
+pack(){
+	current=$(realpath $PWD)
+	if [ ! -d /tmp/ldar ]; then
+		mkdir /tmp/ldar
+	fi
+	cp -r $1 /tmp/ldar/
+	cd /tmp/ldar/
+	rpack $1
+	mv /tmp/ldar/"$1.ldar" $current
+	rm -r /tmp/ldar
+}
+case "$1" in
+	pack|unpack) $@;;
+	*) echo "ldar: usage: ldar [ pack | unpack ] file...";;
+esac
