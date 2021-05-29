@@ -16,7 +16,8 @@ getpart(){
 unpack(){
 	source=$1
 	if [ -z $2 ]; then
-		output=$PWD
+		mkdir $1-out
+		output=$1-out
 	else
 		mkdir $2
 		output=$2
@@ -36,7 +37,7 @@ unpack(){
 		location $size
 	done
 	cd $output
-	for item in $(ls)
+	for item in $(ls -a)
 	do
 		if [ "${item##*.}" = ldar ]; then
 			location=0
@@ -66,15 +67,21 @@ rpack(){
 	foldername=$(basename $folder)
 	name=$foldername.ldar
 	cd $folder
-	for item in $(ls)
+	for item in $(ls -a)
 	do
 		if [ -d $item ]; then
-			rpack $item
-			cd ..
+			if [ $item = "." ]; then
+				true
+			elif [ $item = ".." ]; then
+				true
+			else
+				rpack $item
+				cd ..
+			fi
 		fi
 	done
 	folder="$1"
-	foldername=$(basename $folder)
+	foldername=$(basename "$1")
 	name=$foldername.ldar
 	max
 	if [ ! $(expr $(echo $maxlenght | wc -c) - 1) = 2 ]; then
@@ -83,24 +90,30 @@ rpack(){
 		sizepointer=$maxlenght
 	fi
 	echo -n $sizepointer >> ../$name
-	for item in $(ls)
+	for item in $(ls -a)
 	do
-		echo adding $item
-		if [ -f $item ]; then
-			itemnamelenght=$(echo -n $item | wc -c)
-			until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
-			do
-				itemnamelenght=0$itemnamelenght
-			done
-			echo -n $itemnamelenght >> ../$name
-			echo -n $item >> ../$name
-			contentlenght=$(cat $item | wc -c)
-			until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
-			do
-				contentlenght=0$contentlenght
-			done
-			echo -n $contentlenght >> ../$name
-			cat $item >> ../$name
+		if [ $item = "." ]; then
+			true
+		elif [ $item = ".." ]; then
+			true
+		else
+			echo adding $item
+			if [ -f $item ]; then
+				itemnamelenght=$(echo -n $item | wc -c)
+				until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
+				do
+					itemnamelenght=0$itemnamelenght
+				done
+				echo -n $itemnamelenght >> ../$name
+				echo -n $item >> ../$name
+				contentlenght=$(cat $item | wc -c)
+				until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
+				do
+					contentlenght=0$contentlenght
+				done
+				echo -n $contentlenght >> ../$name
+				cat $item >> ../$name
+			fi
 		fi
 	done
 }
