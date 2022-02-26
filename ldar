@@ -1,20 +1,24 @@
 #!/bin/sh
-location=0
-headerlenght=2
-getsource(){
+loc=0
+header=2
+get(){
 	cat $source
 }
-location(){
-	add=$1
-	location=$(expr $location + $add )
+loc(){
+	loc=$(expr $loc + $1 )
 }
-getpart(){
+part(){
 	tailcut=$1
 	headcut=$2
-	getsource | head -c $headcut | tail -c $(expr $headcut - $tailcut )
+	get | head -c $headcut | tail -c $(expr $headcut - $tailcut )
 }
 unpack(){
-	source=$1
+	if [ -f $1 ]; then
+		source=$1
+	else
+		echo "error: you can't unpack directory"
+		exit 1
+	fi
 	if [ -z $2 ]; then
 		mkdir $1-out
 		output=$1-out
@@ -22,25 +26,31 @@ unpack(){
 		mkdir $2
 		output=$2
 	fi
-	sizepointer=$(getpart 0 $headerlenght)
-	location $headerlenght
-	while [ $location -lt $(getsource | wc -c ) ]
+	sizepoint=$(part 0 $header)
+	loc $header
+	while [ $loc -lt $(get | wc -c ) ]
 	do
-		size=$( getpart $location $(expr $location + $sizepointer))
-		location $sizepointer
-		title=$(getpart $location $(expr $location + $size))
-		location $size
-		size=$( getpart $location $(expr $location + $sizepointer))
-		location $sizepointer
-		getpart $location $(expr $location + $size) > $output/$title
+		size=$(part $loc $(expr $loc + $sizepoint))
+		loc $sizepoint
+		title=$(part $loc $(expr $loc + $size))
+		loc $size
+		size=$( part $loc $(expr $loc + $sizepoint))
+		loc $sizepoint
+		if [ -z $title ]; then
+			echo error: title not empty
+			echo cleaning...
+			rm -r "$output"
+			exit 1
+		fi
+		part $loc $(expr $loc + $size) > $output/$title
 		echo unpacking file $title
-		location $size
+		loc $size
 	done
 	cd $output
 	for item in $(ls -a)
 	do
 		if [ "${item##*.}" = ldar ]; then
-			location=0
+			loc=0
 			unpack "$item" "${item%.*}"
 			echo unpacking folder "${item%.*}" as defined by "$item"
 			cd ..
@@ -54,9 +64,7 @@ max(){
 	for file in $(find -type f)
 	do
 		tmp=$(cat $file | wc -c)
-		if [ ! $max -gt $tmp ]; then
-			max=$tmp
-		fi
+		[ ! $max -gt $tmp ] && max=$tmp
 	done
 	maxlenght=$(echo $max | wc -c)
 }
@@ -67,65 +75,65 @@ rpack(){
 	foldername=$(basename $folder)
 	name=$foldername.ldar
 	cd $folder
-	for item in $(ls -a)
+	for item in $(ls -A)
 	do
 		if [ -d $item ]; then
-			if [ $item = "." ]; then
-				true
-			elif [ $item = ".." ]; then
-				true
-			else
 				rpack $item
 				cd ..
-			fi
 		fi
 	done
+	#reset stuff because rpack function executed in above loop sets them for itself
 	folder="$1"
 	foldername=$(basename "$1")
 	name=$foldername.ldar
+	#get biggest file for optimized size of archive
 	max
-	if [ ! $(expr $(echo $maxlenght | wc -c) - 1) = 2 ]; then
-		sizepointer=0$maxlenght
+	#make size point same lenght in all cases
+	#in this case always 2 chars
+	if [ ! $(expr $(echo $maxlenght | wc -c) - 1 ) = 2 ]; then
+		sizepoint=0$maxlenght
 	else
-		sizepointer=$maxlenght
+		sizepoint=$maxlenght
 	fi
-	echo -n $sizepointer >> ../$name
-	for item in $(ls -a)
+	#write sizepointer to archive
+	echo -n $sizepoint >> ../$name
+	#pack files themselves
+	for item in $(ls -A)
 	do
-		if [ $item = "." ]; then
-			true
-		elif [ $item = ".." ]; then
-			true
-		else
-			echo adding $item
-			if [ -f $item ]; then
-				itemnamelenght=$(echo -n $item | wc -c)
-				until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
-				do
-					itemnamelenght=0$itemnamelenght
-				done
-				echo -n $itemnamelenght >> ../$name
-				echo -n $item >> ../$name
-				contentlenght=$(cat $item | wc -c)
-				until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
-				do
-					contentlenght=0$contentlenght
-				done
-				echo -n $contentlenght >> ../$name
-				cat $item >> ../$name
-			fi
+		echo adding $item
+		if [ -f $item ]; then
+			itemnamelenght=$(echo -n $item | wc -c)
+			#make item name lenght always same lenght defined by max function
+			until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
+			do
+				itemnamelenght=0$itemnamelenght
+			done
+			#add item name to pack
+			echo -n $itemnamelenght >> ../$name
+			echo -n $item >> ../$name
+			contentlenght=$(cat $item | wc -c)
+			#make content lenght always same lenght defined by max function
+			until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
+			do
+				contentlenght=0$contentlenght
+			done
+			#add content of file to pack
+			echo -n $contentlenght >> ../$name
+			cat $item >> ../$name
 		fi
 	done
 }
 pack(){
-	current=$(realpath $PWD)
+	cur=$(realpath $PWD)
+	#create temp file to work in
 	if [ ! -d /tmp/ldar ]; then
 		mkdir /tmp/ldar
 	fi
 	cp -r $1 /tmp/ldar/
 	cd /tmp/ldar/
 	rpack $1
-	mv /tmp/ldar/"$1.ldar" $current
+	#move temp files to output
+	mv /tmp/ldar/"$1.ldar" $cur
 	rm -r /tmp/ldar
 }
 case "$1" in
