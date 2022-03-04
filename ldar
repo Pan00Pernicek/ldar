@@ -1,85 +1,112 @@
 #!/bin/sh
+## shellcheck enable=all
 loc=0
 header=2
 get(){
-	cat $source
+	if [ -f "${source}" ]; then
+		cat "${source}"
+	else
+		echo invalid source
+		exit 1
+	fi
 }
 loc(){
-	loc=$(expr $loc + $1 )
+	if [ -n "$1" ]; then
+		#shellcheck disable=SC2003
+		loc=$(expr "$loc" + "$1" )
+	else
+		echo error: no location input
+		exit 1
+	fi
 }
 part(){
-	tailcut=$1
-	headcut=$2
-	get | head -c $headcut | tail -c $(expr $headcut - $tailcut )
+	tailcut="$1"
+	headcut="$2"
+	#shellcheck disable=SC2003
+	get | head -c "$headcut" | tail -c "$(expr "$headcut" - "$tailcut" )"
 }
 unpack(){
-	if [ -f $1 ]; then
-		source=$1
+	if [ -f "$1" ]; then
+		source="$1"
 	else
 		echo "error: you can't unpack directory"
 		exit 1
 	fi
-	if [ -z $2 ]; then
-		mkdir $1-out
+	if [ -z "$2" ]; then
+		mkdir "$1"-out || exit 1
 		output=$1-out
 	else
-		mkdir $2
+		mkdir "$2" || exit 1
 		output=$2
 	fi
 	sizepoint=$(part 0 $header)
 	loc $header
-	while [ $loc -lt $(get | wc -c ) ]
+	while [ "$loc" -lt "$(get | wc -c )" ]
 	do
-		size=$(part $loc $(expr $loc + $sizepoint))
-		loc $sizepoint
-		title=$(part $loc $(expr $loc + $size))
-		loc $size
-		size=$( part $loc $(expr $loc + $sizepoint))
-		loc $sizepoint
-		if [ -z $title ]; then
+		#expr file globbing and splitting is irelelevant here, and even though its good idea to always quote stuff, here it would cause additional work
+		#shellcheck disable=SC2046
+		#shellcheck disable=SC2003
+		size=$(part "$loc" $(expr "$loc" + "$sizepoint"))
+		loc "$sizepoint"
+		#shellcheck disable=SC2046
+		#shellcheck disable=SC2003
+		title=$(part "$loc" $(expr "$loc" + "$size"))
+		loc "$size"
+		#shellcheck disable=SC2046
+		#shellcheck disable=SC2003
+		size=$(part "$loc" $(expr "$loc" + "$sizepoint"))
+		loc "$sizepoint"
+		if [ -z "$title" ]; then
 			echo error: title not empty
 			echo cleaning...
 			rm -r "$output"
 			exit 1
 		fi
-		part $loc $(expr $loc + $size) > $output/$title
-		echo unpacking file $title
-		loc $size
+		#shellcheck disable=SC2046
+		#shellcheck disable=SC2003
+		part "$loc" $(expr "$loc" + "$size") > "$output"/"$title"
+		echo unpacking file "$title"
+		loc "$size"
 	done
-	cd $output
-	for item in $(ls -a)
+	cd "$output" || exit 1
+	#alternative proposed by shellcheck doesnt work properly in some shells like dash or mksh when trying to list even hidden files
+	#shellcheck disable=SC2045
+	for item in $(ls -A)
 	do
 		if [ "${item##*.}" = ldar ]; then
 			loc=0
 			unpack "$item" "${item%.*}"
 			echo unpacking folder "${item%.*}" as defined by "$item"
-			cd ..
+			cd .. || exit 1
 		fi
 	done
-	rm *.ldar
+	rm ./*.ldar
 }
 max(){
 	echo finding largest file...
 	max=0
-	for file in $(find -type f)
+	#alternatives dont provide much benefit here
+	#shellcheck disable=SC2044
+	for file in $(find . -type f)
 	do
-		tmp=$(cat $file | wc -c)
-		[ ! $max -gt $tmp ] && max=$tmp
+		tmp=$(wc -c < "$file")
+		[ ! "$max" -gt "$tmp" ] && max="$tmp"
 	done
-	maxlenght=$(echo $max | wc -c)
+	maxlenght=$(printf '%s\n' "$max" | wc -c )
 }
 ###
 rpack(){
-	echo packing $1
+	echo packing "$1"
 	folder="$1"
-	foldername=$(basename $folder)
-	name=$foldername.ldar
-	cd $folder
+	foldername=$(basename "$folder")
+	name="${foldername}.ldar"
+	cd "$folder" || exit 1 
+	#shellcheck disable=SC2045
 	for item in $(ls -A)
 	do
-		if [ -d $item ]; then
-				rpack $item
-				cd ..
+		if [ -d "$item" ]; then
+				rpack "$item"
+				cd .. || exit
 		fi
 	done
 	#reset stuff because rpack function executed in above loop sets them for itself
@@ -90,53 +117,58 @@ rpack(){
 	max
 	#make size point same lenght in all cases
 	#in this case always 2 chars
-	if [ ! $(expr $(echo $maxlenght | wc -c) - 1 ) = 2 ]; then
+	#shellcheck disable=SC2003
+	#shellcheck disable=SC2046
+	if [ ! $(expr $(printf '%s\n' "$maxlenght" | wc -c ) - 1 ) = 2 ]; then
 		sizepoint=0$maxlenght
 	else
 		sizepoint=$maxlenght
 	fi
 	#write sizepointer to archive
-	echo -n $sizepoint >> ../$name
+	printf '%s' "$sizepoint" >> "../${name}"
 	#pack files themselves
+	#shellcheck disable=SC2045
 	for item in $(ls -A)
 	do
-		echo adding $item
-		if [ -f $item ]; then
-			itemnamelenght=$(echo -n $item | wc -c)
+		echo adding "$item"
+		if [ -f "$item" ]; then
+			itemnamelenght=$(printf '%s' "$item" | wc -c )
 			#make item name lenght always same lenght defined by max function
-			until [ $(echo -n $itemnamelenght | wc -c ) = $maxlenght ]
+			until [ "$(printf '%s' "$itemnamelenght" | wc -c )" = "$maxlenght" ]
 			do
-				itemnamelenght=0$itemnamelenght
+				itemnamelenght="0${itemnamelenght}"
 			done
 			#add item name to pack
-			echo -n $itemnamelenght >> ../$name
-			echo -n $item >> ../$name
-			contentlenght=$(cat $item | wc -c)
+			printf '%s' "$itemnamelenght" >> "../${name}"
+			printf '%s' "$item" >> "../${name}"
+			contentlenght=$(wc -c < "$item")
 			#make content lenght always same lenght defined by max function
-			until [ $(echo -n $contentlenght | wc -c ) = $maxlenght ]
+			until [ "$(printf '%s' "$contentlenght" | wc -c )" = "$maxlenght" ]
 			do
-				contentlenght=0$contentlenght
+				contentlenght="0${contentlenght}"
 			done
 			#add content of file to pack
-			echo -n $contentlenght >> ../$name
-			cat $item >> ../$name
+			printf '%s' "$contentlenght" >> "../${name}"
+			cat "${item}" >> "../${name}"
 		fi
 	done
 }
 pack(){
-	cur=$(realpath $PWD)
+	cur=$(realpath "$PWD")
 	#create temp file to work in
 	if [ ! -d /tmp/ldar ]; then
 		mkdir /tmp/ldar
+	else
+		rm -r /tmp/ldar
 	fi
-	cp -r $1 /tmp/ldar/
-	cd /tmp/ldar/
-	rpack $1
+	cp -r "$1" /tmp/ldar/
+	cd /tmp/ldar/ || exit
+	rpack "$1"
 	#move temp files to output
-	mv /tmp/ldar/"$1.ldar" $cur
+	mv /tmp/ldar/"$1.ldar" "$cur"
 	rm -r /tmp/ldar
 }
 case "$1" in
-	pack|unpack) $@;;
+	pack|unpack) "$@";;
 	*) echo "ldar: usage: ldar [ pack | unpack ] file...";;
 esac
